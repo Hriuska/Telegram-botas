@@ -14,6 +14,12 @@ Lentelės stulpeliai:
                eilute. Tinka tiesioginės nuorodos ir Google Drive nuorodos
                (failas turi būti bendrinamas „Visi, turintys nuorodą“).
                Kelios nuorodos paskelbiamos kaip vienas albumas.
+  mygtukas   – nebūtina. Tuščia: po įrašu dedamas numatytasis mygtukas
+               (žr. NUMATYTAS_MYGTUKAS žemiau). „-“: mygtuko nebus.
+               „Tekstas“: mygtukas su šiuo tekstu ir numatytąja nuoroda.
+               „Tekstas | https://...“: mygtukas su savo tekstu ir nuoroda.
+  prisegti   – nebūtina. „taip“: paskelbtas įrašas prisegamas kanalo viršuje
+               (botui reikia administratoriaus teisės redaguoti / prisegti žinutes).
 
 Nustatymai (aplinkos kintamieji):
   TELEGRAM_BOT_TOKEN – boto raktas iš @BotFather
@@ -53,6 +59,10 @@ NUOTR_DYDIS = 10 * 1024**2   # botas gali įkelti nuotrauką iki 10 MB
 FAILO_DYDIS = 50 * 1024**2   # ir vaizdo įrašą iki 50 MB
 VIDEO_PLETINIAI = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")
 UA = {"User-Agent": "Mozilla/5.0 (telegram-irasu-botas)"}
+
+# Mygtukas po kiekvienu įrašu (galima keisti čia)
+NUMATYTAS_MYGTUKAS = "🛒 Įsigyti tiekėjus"
+NUMATYTA_NUORODA = "https://bizniava.lt"
 
 
 def dabar() -> datetime:
@@ -146,7 +156,7 @@ def atsisiusti(url: str) -> tuple[bytes, str, str]:
 
 # ---------- Telegram ----------
 
-def telegram(metodas: str, laukai: dict, failai: dict | None = None) -> None:
+def telegram(metodas: str, laukai: dict, failai: dict | None = None):
     """Siunčia užklausą Telegram. failai: {lauko_vardas: (failo_vardas, baitai)}."""
     url = f"{API}/bot{TOKEN}/{metodas}"
     if failai:
@@ -174,45 +184,86 @@ def telegram(metodas: str, laukai: dict, failai: dict | None = None) -> None:
         ats = json.loads(ex.read() or b"{}")
     if not ats.get("ok"):
         raise RuntimeError(f"Telegram klaida: {ats.get('description', ats)}")
+    return ats.get("result")
 
 
-def paskelbti(e: dict) -> None:
+def zinutes_id(rez) -> int | None:
+    """Iš Telegram atsakymo paima žinutės ID (albumo atveju – pirmos)."""
+    if isinstance(rez, list):
+        rez = rez[0] if rez else None
+    return rez.get("message_id") if isinstance(rez, dict) else None
+
+
+def mygtukas(laukas: str) -> str | None:
+    """Grąžina Telegram mygtuko JSON (reply_markup) arba None, jei mygtuko nereikia."""
+    laukas = (laukas or "").strip()
+    if laukas == "-":
+        return None
+    if not laukas:
+        tekstas, url = NUMATYTAS_MYGTUKAS, NUMATYTA_NUORODA
+    elif "|" in laukas:
+        tekstas, url = (x.strip() for x in laukas.split("|", 1))
+    else:
+        tekstas, url = laukas, NUMATYTA_NUORODA
+    if not tekstas or not url.startswith(("http://", "https://")):
+        raise RuntimeError(f"netinkamas mygtukas „{laukas}“ (formatas: Tekstas | https://...)")
+    return json.dumps({"inline_keyboard": [[{"text": tekstas, "url": url}]]}, ensure_ascii=False)
+
+
+def paskelbti(e: dict) -> int | None:
+    """Paskelbia įrašą ir grąžina žinutės su tekstu / mygtuku ID."""
     tekstas = e.get("tekstas", "")
     sarasas = nuorodos(e.get("nuotrauka", ""))
     if len(sarasas) > ALBUMO_RIBA:
         raise RuntimeError(f"per daug failų ({len(sarasas)}); viename įraše galima iki {ALBUMO_RIBA}")
+    kb = mygtukas(e.get("mygtukas", ""))
+
+    def su_mygtuku(laukai: dict) -> dict:
+        if kb:
+            laukai["reply_markup"] = kb
+        return laukai
 
     if not sarasas:
         if tekstas:
-            telegram("sendMessage", {"chat_id": CHANNEL, "text": tekstas})
-        return
+            return zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas})))
+        return None
 
     failai = [atsisiusti(u) for u in sarasas]  # jei kuris nepavyks – nieko neskelbiama
-    aprasas = tekstas if len(tekstas) <= APRASO_RIBA else ""
 
     if len(failai) == 1:
+        aprasas = tekstas if len(tekstas) <= APRASO_RIBA else ""
         baitai, vardas, tipas = failai[0]
         laukai = {"chat_id": CHANNEL}
         if aprasas:
             laukai["caption"] = aprasas
         if tipas == "video":
             laukai["supports_streaming"] = "true"
-        telegram("sendVideo" if tipas == "video" else "sendPhoto", laukai, {tipas: (vardas, baitai)})
-    else:
-        media, priedai = [], {}
-        for i, (baitai, vardas, tipas) in enumerate(failai):
-            item = {"type": tipas, "media": f"attach://f{i}"}
-            if i == 0 and aprasas:
-                item["caption"] = aprasas
-            if tipas == "video":
-                item["supports_streaming"] = True
-            media.append(item)
-            priedai[f"f{i}"] = (vardas, baitai)
-        telegram("sendMediaGroup",
-                 {"chat_id": CHANNEL, "media": json.dumps(media, ensure_ascii=False)}, priedai)
+        if aprasas or not tekstas:  # mygtukas po nuotrauka, jei tekstas tilpo
+            su_mygtuku(laukai)
+        mid = zinutes_id(telegram("sendVideo" if tipas == "video" else "sendPhoto",
+                                  laukai, {tipas: (vardas, baitai)}))
+        if tekstas and not aprasas:  # per ilgas tekstas – atskira žinute su mygtuku
+            mid = zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas})))
+        return mid
 
-    if tekstas and not aprasas:  # per ilgas tekstas – siunčiamas atskira žinute
-        telegram("sendMessage", {"chat_id": CHANNEL, "text": tekstas})
+    # Albumas. Telegram neleidžia mygtukų po albumu, todėl jei yra mygtukas
+    # (arba tekstas per ilgas), tekstas siunčiamas atskira žinute iškart po albumu.
+    aprasas = tekstas if (len(tekstas) <= APRASO_RIBA and not kb) else ""
+    media, priedai = [], {}
+    for i, (baitai, vardas, tipas) in enumerate(failai):
+        item = {"type": tipas, "media": f"attach://f{i}"}
+        if i == 0 and aprasas:
+            item["caption"] = aprasas
+        if tipas == "video":
+            item["supports_streaming"] = True
+        media.append(item)
+        priedai[f"f{i}"] = (vardas, baitai)
+    mid = zinutes_id(telegram("sendMediaGroup",
+                              {"chat_id": CHANNEL, "media": json.dumps(media, ensure_ascii=False)}, priedai))
+    if tekstas and not aprasas:
+        mid = zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas})))
+    return mid
+
 
 
 # ---------- pagrindinė dalis ----------
@@ -253,10 +304,18 @@ def main() -> int:
             print(f"[BANDYMAS] Būtų paskelbta {kada:%Y-%m-%d %H:%M}{priedas}: {pradzia}…")
             continue
         try:
-            paskelbti(e)
+            mid = paskelbti(e)
             with open(STATE_FILE, "a") as f:
                 f.write(iid + "\n")
             print(f"Paskelbta {kada:%Y-%m-%d %H:%M}{priedas}: {pradzia}…")
+            if e.get("prisegti", "").strip().lower() in ("taip", "t", "yes", "x", "1") and mid:
+                try:
+                    telegram("pinChatMessage", {"chat_id": CHANNEL, "message_id": mid,
+                                                "disable_notification": "true"})
+                    print("  ↳ prisegta kanalo viršuje")
+                except Exception as ex:
+                    klaidos += 1
+                    print(f"  ↳ nepavyko prisegti ({ex}). Ar botas turi teisę redaguoti žinutes?")
         except Exception as ex:
             klaidos += 1
             print(f"Nepavyko ({kada:%Y-%m-%d %H:%M}): {ex}")
