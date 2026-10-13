@@ -25,7 +25,10 @@ Nustatymai (aplinkos kintamieji):
   TELEGRAM_BOT_TOKEN – boto raktas iš @BotFather
   TELEGRAM_CHANNEL   – kanalas, pvz. @mano_kanalas
   SHEET_CSV_URL      – Google Sheets CSV nuoroda (arba kelias į .csv failą)
+  GOOGLE_API_KEY     – Google Drive API raktas (tik automatiniam režimui)
   DRY_RUN=1          – nieko nesiųsti, tik parodyti, kas būtų paskelbta
+
+Automatinis režimas (nebūtina) aprašytas skyriuje „automatinis režimas“ žemiau.
 """
 
 import csv
@@ -34,6 +37,7 @@ import io
 import json
 import mimetypes
 import os
+import random
 import re
 import sys
 import urllib.error
@@ -89,9 +93,10 @@ def nuskaityti_lentele() -> list[dict]:
 
 def isskaidyti_laika(data: str, laikas: str) -> datetime | None:
     data = data.replace("/", ".").replace("-", ".")
-    laikas = (laikas or "00:00")[:5].strip()
-    if len(laikas) == 4:  # 9:00 -> 09:00
-        laikas = "0" + laikas
+    hm = laikas_is_teksto(laikas or "00:00")
+    if hm is None:
+        return None
+    laikas = f"{hm[0]:02d}:{hm[1]:02d}"
     for fmt in ("%Y.%m.%d", "%d.%m.%Y"):
         try:
             d = datetime.strptime(f"{data} {laikas}", f"{fmt} %H:%M")
@@ -265,6 +270,198 @@ def paskelbti(e: dict) -> int | None:
     return mid
 
 
+# ---------- automatinis režimas (Drive aplankai) ----------
+#
+# Lentelėje papildomi lapai (skirtukai apačioje):
+#   auto      – laikas | kategorija | dienos (nebūtina, pvz. „Pr, Tr, Pn“; tuščia = kasdien)
+#   aplankai  – kategorija | aplankas (Google Drive aplanko nuoroda; ta pati kategorija
+#               gali būti keliose eilutėse, pvz. atskiri nuotraukų ir vaizdo įrašų aplankai)
+#   tekstai   – kategorija | tekstas (keli variantai kiekvienai kategorijai)
+# Kategorija „Visi“ ima failus iš bet kurio aplanko. Kategorija, kurios nėra lape
+# „aplankai“ (pvz. DUK, Gyvos), skelbiama tik tekstu. Stulpelis „mygtukas“ – kaip pagr. lape.
+# Reikia GOOGLE_API_KEY (Google Drive API raktas) ir kad aplankai būtų bendrinami
+# „Visi, turintys nuorodą“.
+
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
+DRIVE_API = os.environ.get("DRIVE_API", "https://www.googleapis.com/drive/v3/files")
+DRIVE_DL = os.environ.get("DRIVE_DL", "https://drive.google.com/uc?export=download&id=")
+AUTO_VELAVIMAS = timedelta(hours=int(os.environ.get("AUTO_VELAVIMAS_VAL", "3")))
+VIDEO_TIKIMYBE = 0.4          # kaip dažnai rinktis vaizdo įrašą, kai yra ir nuotraukų
+ALBUMAS_NUO, ALBUMAS_IKI = 2, 5
+DIENOS = {"pr": 0, "an": 1, "tr": 2, "kt": 3, "pn": 4, "št": 5, "st": 5, "sk": 6}
+VISI = {"visi", "visos", "bet kuri", "bet koks"}
+
+
+def laikas_is_teksto(t: str) -> tuple[int, int] | None:
+    m = re.search(r"(\d{1,2})[:.](\d{2})", t or "")
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def lapas(pavadinimas: str, privalomi: set[str], draudziami: set[str] = frozenset()) -> list[dict] | None:
+    """Nuskaito kitą lentelės lapą pagal pavadinimą. None – jei tokio lapo nėra."""
+    if SOURCE.startswith("http"):
+        m = re.search(r"/spreadsheets/d/([\w-]+)", SOURCE)
+        if not m:
+            return None
+        url = (f"https://docs.google.com/spreadsheets/d/{m.group(1)}/gviz/tq?tqx=out:csv&headers=1"
+               f"&sheet={urllib.parse.quote(pavadinimas)}")
+        try:
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=30) as r:
+                turinys = r.read().decode("utf-8-sig")
+        except Exception:
+            return None
+    else:  # vietinis bandymas: irasai.csv -> irasai_auto.csv
+        kelias = re.sub(r"\.csv$", "", SOURCE) + f"_{pavadinimas}.csv"
+        if not os.path.exists(kelias):
+            return None
+        with open(kelias, encoding="utf-8-sig") as f:
+            turinys = f.read()
+    eil = [{(k or "").strip().lower(): (v or "").strip() for k, v in e.items()}
+           for e in csv.DictReader(io.StringIO(turinys))]
+    stulpeliai = set(eil[0].keys()) if eil else set()
+    # Google, neradęs lapo, kartais grąžina pirmą lapą – patikriname stulpelius
+    if not privalomi <= stulpeliai or stulpeliai & draudziami:
+        return None
+    return eil
+
+
+def kat_raktas(k: str) -> str:
+    return re.sub(r"\s+", " ", (k or "").strip().lower())
+
+
+def drive_aplanko_failai(nuoroda: str) -> list[dict]:
+    m = re.search(r"/folders/([\w-]+)", nuoroda) or re.search(r"[?&]id=([\w-]+)", nuoroda)
+    if not m:
+        raise RuntimeError(f"neatpažinta Drive aplanko nuoroda: {nuoroda}")
+    failai, token = [], ""
+    while True:
+        q = {"q": f"'{m.group(1)}' in parents and trashed = false", "key": GOOGLE_API_KEY,
+             "fields": "nextPageToken, files(id, name, mimeType, size)", "pageSize": "1000"}
+        if token:
+            q["pageToken"] = token
+        req = urllib.request.Request(f"{DRIVE_API}?{urllib.parse.urlencode(q)}", headers=UA)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                ats = json.loads(r.read())
+        except urllib.error.HTTPError as ex:
+            raise RuntimeError(f"Google Drive klaida ({ex.code}). Ar teisingas GOOGLE_API_KEY "
+                               f"ir ar aplankas bendrinamas visiems? {nuoroda}")
+        for f in ats.get("files", []):
+            mt, dydis = f.get("mimeType", ""), int(f.get("size") or 0)
+            if mt.startswith("image/") and dydis <= NUOTR_DYDIS:
+                failai.append({"id": f["id"], "tipas": "photo"})
+            elif mt.startswith("video/") and dydis <= FAILO_DYDIS:
+                failai.append({"id": f["id"], "tipas": "video"})
+        token = ats.get("nextPageToken")
+        if not token:
+            return failai
+
+
+def maziausiai_naudoti(elementai: list, raktas, naudota: dict, kiek: int, atsitiktinis) -> list:
+    """Parenka tuos, kurie dar nenaudoti arba naudoti seniausiai."""
+    tvarka = sorted(elementai, key=lambda x: (naudota.get(raktas(x), -1), atsitiktinis.random()))
+    return tvarka[:kiek]
+
+
+def auto_skelbti(now: datetime, busena: list[str]) -> int:
+    """Skelbia automatinius įrašus. Grąžina klaidų skaičių."""
+    grafikas = lapas("auto", {"laikas", "kategorija"}, {"tekstas", "data"})
+    if grafikas is None:
+        return 0
+    aplankai = lapas("aplankai", {"kategorija", "aplankas"}, {"tekstas", "data"}) or []
+    tekstai = lapas("tekstai", {"kategorija", "tekstas"}, {"data", "laikas"}) or []
+    if not GOOGLE_API_KEY and not DRY_RUN:
+        print("Automatinis režimas: trūksta GOOGLE_API_KEY, praleidžiama.")
+        return 1
+
+    padaryta = set(busena)
+    naudota = {}  # elementas -> paskutinio naudojimo eilės nr.
+    for i, l in enumerate(busena):
+        naudota[l] = i
+    aplanku_map: dict[str, list[str]] = {}  # viena kategorija gali turėti kelis aplankus
+    for a in aplankai:
+        if a.get("aplankas", "").startswith("http"):
+            aplanku_map.setdefault(kat_raktas(a["kategorija"]), []).append(a["aplankas"])
+    failu_talpykla: dict[str, list] = {}
+    klaidos = 0
+
+    for eil in grafikas:
+        kat = eil.get("kategorija", "")
+        hm = laikas_is_teksto(eil.get("laikas", ""))
+        if not kat or not hm:
+            continue
+        dienos = [DIENOS[d] for d in re.findall(r"[a-zš]+", eil.get("dienos", "").lower()) if d in DIENOS]
+        if dienos and now.weekday() not in dienos:
+            continue
+        kada = now.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        raktas = f"auto:{kada:%Y-%m-%d %H:%M} {kat_raktas(kat)}"
+        if kada > now or raktas in padaryta or now - kada > AUTO_VELAVIMAS:
+            continue
+
+        rnd = random.Random()
+        try:
+            # tekstas
+            kr = kat_raktas(kat)
+            variantai = [t["tekstas"] for t in tekstai if kat_raktas(t["kategorija"]) == kr and t["tekstas"]]
+            if not variantai:
+                raise RuntimeError(f"lape „tekstai“ nėra tekstų kategorijai „{kat}“")
+            tekstas = maziausiai_naudoti(variantai, lambda t: "t:" + hashlib.sha1(t.encode()).hexdigest()[:12],
+                                         naudota, 1, rnd)[0]
+
+            # failai iš tos pačios kategorijos aplanko
+            be_failu = False
+            if kr in VISI:
+                saltiniai = [s for sar in aplanku_map.values() for s in sar]
+            elif kr in aplanku_map:
+                saltiniai = aplanku_map[kr]
+            else:  # kategorija be aplanko (pvz. DUK, Gyvos) – skelbiamas tik tekstas
+                saltiniai, be_failu = [], True
+            failai = []
+            for s in saltiniai:
+                if s not in failu_talpykla:
+                    failu_talpykla[s] = [] if DRY_RUN and not GOOGLE_API_KEY else drive_aplanko_failai(s)
+                failai += failu_talpykla[s]
+            nuotr = [f for f in failai if f["tipas"] == "photo"]
+            video = [f for f in failai if f["tipas"] == "video"]
+
+            fr = lambda f: "f:" + f["id"]
+            if video and (len(nuotr) < 2 or rnd.random() < VIDEO_TIKIMYBE):
+                pasirinkta = maziausiai_naudoti(video, fr, naudota, 1, rnd)
+            elif len(nuotr) >= 2:
+                k = rnd.randint(ALBUMAS_NUO, min(ALBUMAS_IKI, len(nuotr)))
+                pasirinkta = maziausiai_naudoti(nuotr, fr, naudota, k, rnd)
+            elif nuotr:
+                pasirinkta = nuotr
+            else:
+                pasirinkta = []
+                if not DRY_RUN and not be_failu:
+                    raise RuntimeError(f"kategorijos „{kat}“ aplanke nėra nuotraukų ar vaizdo įrašų")
+
+            aprasymas = (f"{len(pasirinkta)} nuotr." if pasirinkta and pasirinkta[0]["tipas"] == "photo"
+                         else "vaizdo įrašas" if pasirinkta else "tik tekstas")
+            pradzia = tekstas[:45].replace("\n", " ")
+            if DRY_RUN:
+                print(f"[BANDYMAS] Auto {kada:%H:%M} {kat} ({aprasymas}): {pradzia}…")
+                continue
+
+            paskelbti({"tekstas": tekstas,
+                       "nuotrauka": " ".join(DRIVE_DL + f["id"] for f in pasirinkta),
+                       "mygtukas": eil.get("mygtukas", "")})
+            nauji = [raktas, "t:" + hashlib.sha1(tekstas.encode()).hexdigest()[:12]] + [fr(f) for f in pasirinkta]
+            with open(STATE_FILE, "a") as f:
+                f.write("\n".join(nauji) + "\n")
+            for n in nauji:
+                padaryta.add(n)
+                naudota[n] = len(naudota) + len(busena)
+            print(f"Auto paskelbta {kada:%H:%M} {kat} ({aprasymas}): {pradzia}…")
+        except Exception as ex:
+            klaidos += 1
+            print(f"Auto nepavyko ({kada:%H:%M} {kat}): {ex}")
+    return klaidos
+
 
 # ---------- pagrindinė dalis ----------
 
@@ -273,10 +470,11 @@ def main() -> int:
         print("Trūksta TELEGRAM_BOT_TOKEN arba TELEGRAM_CHANNEL.")
         return 1
 
-    paskelbti_id = set()
+    busena = []
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE) as f:
-            paskelbti_id = {l.strip() for l in f if l.strip()}
+            busena = [l.strip() for l in f if l.strip()]
+    paskelbti_id = set(busena)
 
     now = dabar()
     klaidos = 0
@@ -319,6 +517,11 @@ def main() -> int:
         except Exception as ex:
             klaidos += 1
             print(f"Nepavyko ({kada:%Y-%m-%d %H:%M}): {ex}")
+
+    if os.path.exists(STATE_FILE):  # perskaitome iš naujo – galėjo pasipildyti
+        with open(STATE_FILE) as f:
+            busena = [l.strip() for l in f if l.strip()]
+    klaidos += auto_skelbti(now, busena)
 
     return 1 if klaidos else 0
 
