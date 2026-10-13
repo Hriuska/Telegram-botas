@@ -64,6 +64,9 @@ FAILO_DYDIS = 50 * 1024**2   # ir vaizdo įrašą iki 50 MB
 VIDEO_PLETINIAI = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")
 UA = {"User-Agent": "Mozilla/5.0 (telegram-irasu-botas)"}
 
+# Nuorodų peržiūros (didelės svetainės kortelės) žinutėse nerodomos
+BE_PERZIUROS = {"link_preview_options": json.dumps({"is_disabled": True})}
+
 # Mygtukas po kiekvienu įrašu (galima keisti čia)
 NUMATYTAS_MYGTUKAS = "🛒 Įsigyti tiekėjus"
 NUMATYTA_NUORODA = "https://bizniava.lt"
@@ -230,7 +233,7 @@ def paskelbti(e: dict) -> int | None:
 
     if not sarasas:
         if tekstas:
-            return zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas})))
+            return zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas, **BE_PERZIUROS})))
         return None
 
     failai = [atsisiusti(u) for u in sarasas]  # jei kuris nepavyks – nieko neskelbiama
@@ -248,12 +251,12 @@ def paskelbti(e: dict) -> int | None:
         mid = zinutes_id(telegram("sendVideo" if tipas == "video" else "sendPhoto",
                                   laukai, {tipas: (vardas, baitai)}))
         if tekstas and not aprasas:  # per ilgas tekstas – atskira žinute su mygtuku
-            mid = zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas})))
+            mid = zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas, **BE_PERZIUROS})))
         return mid
 
-    # Albumas. Telegram neleidžia mygtukų po albumu, todėl jei yra mygtukas
-    # (arba tekstas per ilgas), tekstas siunčiamas atskira žinute iškart po albumu.
-    aprasas = tekstas if (len(tekstas) <= APRASO_RIBA and not kb) else ""
+    # Albumas. Telegram neleidžia mygtukų po albumu, todėl tekstas dedamas į patį
+    # albumą (vienas įrašas, be mygtuko). Tik per ilgas tekstas siunčiamas atskirai.
+    aprasas = tekstas if len(tekstas) <= APRASO_RIBA else ""
     media, priedai = [], {}
     for i, (baitai, vardas, tipas) in enumerate(failai):
         item = {"type": tipas, "media": f"attach://f{i}"}
@@ -266,7 +269,7 @@ def paskelbti(e: dict) -> int | None:
     mid = zinutes_id(telegram("sendMediaGroup",
                               {"chat_id": CHANNEL, "media": json.dumps(media, ensure_ascii=False)}, priedai))
     if tekstas and not aprasas:
-        mid = zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas})))
+        mid = zinutes_id(telegram("sendMessage", su_mygtuku({"chat_id": CHANNEL, "text": tekstas, **BE_PERZIUROS})))
     return mid
 
 
