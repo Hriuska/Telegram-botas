@@ -1,0 +1,36 @@
+name: Telegram įrašai
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: telegram-irasai
+  cancel-in-progress: false
+
+jobs:
+  skelbti:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Paskelbti suplanuotus įrašus
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          SHEET_CSV_URL: ${{ secrets.SHEET_CSV_URL }}
+        run: python post_bot.py
+      - name: Įsiminti, kas jau paskelbta
+        if: always()
+        run: |
+          touch paskelbta.txt
+          git config user.name "telegram-botas"
+          git config user.email "telegram-botas@users.noreply.github.com"
+          git add paskelbta.txt
+          git diff --cached --quiet || (git commit -m "Paskelbti įrašai" && git push)
