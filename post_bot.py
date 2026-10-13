@@ -9,13 +9,16 @@ Lentelės stulpeliai:
   data       – 2026-10-14 arba 14.10.2026
   laikas     – 09:00
   tekstas    – įrašo tekstas (gali būti keli paragrafai)
-  nuotrauka  – nebūtina; tiesioginė nuoroda į paveikslėlį
+  nuotrauka  – nebūtina; viena ar kelios nuorodos (iki 10) į nuotraukas
+               ir/arba vaizdo įrašus, atskirtos tarpu, kableliu arba nauja
+               eilute. Tinka tiesioginės nuorodos ir Google Drive nuorodos
+               (failas turi būti bendrinamas „Visi, turintys nuorodą“).
+               Kelios nuorodos paskelbiamos kaip vienas albumas.
 
 Nustatymai (aplinkos kintamieji):
   TELEGRAM_BOT_TOKEN – boto raktas iš @BotFather
   TELEGRAM_CHANNEL   – kanalas, pvz. @mano_kanalas
-  SHEET_CSV_URL      – Google Sheets „Publish to web“ CSV nuoroda
-                       (arba kelias į vietinį .csv failą)
+  SHEET_CSV_URL      – Google Sheets CSV nuoroda (arba kelias į .csv failą)
   DRY_RUN=1          – nieko nesiųsti, tik parodyti, kas būtų paskelbta
 """
 
@@ -23,10 +26,14 @@ import csv
 import hashlib
 import io
 import json
+import mimetypes
 import os
+import re
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -36,8 +43,16 @@ CHANNEL = os.environ.get("TELEGRAM_CHANNEL", "")
 SOURCE = os.environ.get("SHEET_CSV_URL", "irasai.csv")
 STATE_FILE = os.environ.get("STATE_FILE", "paskelbta.txt")
 DRY_RUN = os.environ.get("DRY_RUN") == "1"
+API = os.environ.get("TELEGRAM_API", "https://api.telegram.org")
 # Seni įrašai (pvz. pirmą kartą paleidus) nekeliami, kad kanalas nebūtų užtvindytas
 MAX_VELAVIMAS = timedelta(hours=int(os.environ.get("MAX_VELAVIMAS_VAL", "24")))
+
+APRASO_RIBA = 1024           # Telegram nuotraukos / vaizdo aprašo ilgio riba
+ALBUMO_RIBA = 10             # daugiausia failų viename albume
+NUOTR_DYDIS = 10 * 1024**2   # botas gali įkelti nuotrauką iki 10 MB
+FAILO_DYDIS = 50 * 1024**2   # ir vaizdo įrašą iki 50 MB
+VIDEO_PLETINIAI = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")
+UA = {"User-Agent": "Mozilla/5.0 (telegram-irasu-botas)"}
 
 
 def dabar() -> datetime:
@@ -46,9 +61,12 @@ def dabar() -> datetime:
     return datetime.now(TZ)
 
 
+# ---------- lentelė ----------
+
 def nuskaityti_lentele() -> list[dict]:
     if SOURCE.startswith("http"):
-        with urllib.request.urlopen(SOURCE, timeout=30) as r:
+        req = urllib.request.Request(SOURCE, headers=UA)
+        with urllib.request.urlopen(req, timeout=30) as r:
             turinys = r.read().decode("utf-8-sig")
     else:
         with open(SOURCE, encoding="utf-8-sig") as f:
@@ -78,26 +96,126 @@ def iraso_id(e: dict) -> str:
     return hashlib.sha1(raktas.encode()).hexdigest()[:16]
 
 
-def telegram(metodas: str, duomenys: dict) -> None:
-    url = f"https://api.telegram.org/bot{TOKEN}/{metodas}"
-    body = urllib.parse.urlencode(duomenys).encode()
-    with urllib.request.urlopen(url, data=body, timeout=30) as r:
-        ats = json.loads(r.read())
+# ---------- nuorodos ir failų atsisiuntimas ----------
+
+def nuorodos(laukas: str) -> list[str]:
+    return [n for n in re.split(r"[\s,;]+", laukas or "") if n.startswith("http")]
+
+
+def drive_tiesiogine(url: str) -> str:
+    """Google Drive bendrinimo nuorodą paverčia tiesioginio atsisiuntimo nuoroda."""
+    if "drive.google.com" not in url:
+        return url
+    m = re.search(r"/file/d/([\w-]+)", url) or re.search(r"[?&]id=([\w-]+)", url)
+    if not m:
+        return url
+    return f"https://drive.google.com/uc?export=download&id={m.group(1)}"
+
+
+def atsisiusti(url: str) -> tuple[bytes, str, str]:
+    """Grąžina (turinys, failo vardas, tipas: 'photo' arba 'video')."""
+    req = urllib.request.Request(drive_tiesiogine(url), headers=UA)
+    with urllib.request.urlopen(req, timeout=120) as r:
+        ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        disp = r.headers.get("Content-Disposition") or ""
+        duomenys = r.read(FAILO_DYDIS + 1)
+    if len(duomenys) > FAILO_DYDIS:
+        raise RuntimeError(f"failas per didelis (daugiau nei 50 MB): {url}")
+    if ctype == "text/html":
+        raise RuntimeError(
+            f"nuoroda veda į puslapį, o ne į failą (ar failas bendrinamas visiems?): {url}")
+
+    m = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", disp)
+    vardas = urllib.parse.unquote(m.group(1)) if m else \
+        os.path.basename(urllib.parse.urlparse(url).path) or "failas"
+
+    if ctype.startswith("video/") or vardas.lower().endswith(VIDEO_PLETINIAI):
+        tipas = "video"
+    elif ctype.startswith("image/") or vardas.lower().endswith(
+            (".jpg", ".jpeg", ".png", ".webp", ".gif")):
+        tipas = "photo"
+    else:
+        raise RuntimeError(f"neatpažintas failo tipas ({ctype or 'nežinomas'}): {url}")
+
+    if tipas == "photo" and len(duomenys) > NUOTR_DYDIS:
+        raise RuntimeError(f"nuotrauka per didelė (daugiau nei 10 MB): {url}")
+    if "." not in vardas:
+        vardas += mimetypes.guess_extension(ctype) or (".mp4" if tipas == "video" else ".jpg")
+    return duomenys, vardas, tipas
+
+
+# ---------- Telegram ----------
+
+def telegram(metodas: str, laukai: dict, failai: dict | None = None) -> None:
+    """Siunčia užklausą Telegram. failai: {lauko_vardas: (failo_vardas, baitai)}."""
+    url = f"{API}/bot{TOKEN}/{metodas}"
+    if failai:
+        riba = uuid.uuid4().hex
+        dalys = []
+        for k, v in laukai.items():
+            dalys.append(f"--{riba}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n".encode()
+                         + str(v).encode() + b"\r\n")
+        for k, (vardas, baitai) in failai.items():
+            tipas = mimetypes.guess_type(vardas)[0] or "application/octet-stream"
+            saugus = re.sub(r'[\r\n"]', "_", vardas)
+            dalys.append(
+                f"--{riba}\r\nContent-Disposition: form-data; name=\"{k}\"; filename=\"{saugus}\"\r\n"
+                f"Content-Type: {tipas}\r\n\r\n".encode() + baitai + b"\r\n")
+        body = b"".join(dalys) + f"--{riba}--\r\n".encode()
+        headers = {"Content-Type": f"multipart/form-data; boundary={riba}"}
+    else:
+        body = urllib.parse.urlencode(laukai).encode()
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    req = urllib.request.Request(url, data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            ats = json.loads(r.read())
+    except urllib.error.HTTPError as ex:
+        ats = json.loads(ex.read() or b"{}")
     if not ats.get("ok"):
-        raise RuntimeError(f"Telegram klaida: {ats}")
+        raise RuntimeError(f"Telegram klaida: {ats.get('description', ats)}")
 
 
 def paskelbti(e: dict) -> None:
     tekstas = e.get("tekstas", "")
-    nuotrauka = e.get("nuotrauka", "")
-    if nuotrauka:
-        if len(tekstas) <= 1024:  # Telegram nuotraukos aprašo riba
-            telegram("sendPhoto", {"chat_id": CHANNEL, "photo": nuotrauka, "caption": tekstas})
-            return
-        telegram("sendPhoto", {"chat_id": CHANNEL, "photo": nuotrauka})
-    if tekstas:
+    sarasas = nuorodos(e.get("nuotrauka", ""))
+    if len(sarasas) > ALBUMO_RIBA:
+        raise RuntimeError(f"per daug failų ({len(sarasas)}); viename įraše galima iki {ALBUMO_RIBA}")
+
+    if not sarasas:
+        if tekstas:
+            telegram("sendMessage", {"chat_id": CHANNEL, "text": tekstas})
+        return
+
+    failai = [atsisiusti(u) for u in sarasas]  # jei kuris nepavyks – nieko neskelbiama
+    aprasas = tekstas if len(tekstas) <= APRASO_RIBA else ""
+
+    if len(failai) == 1:
+        baitai, vardas, tipas = failai[0]
+        laukai = {"chat_id": CHANNEL}
+        if aprasas:
+            laukai["caption"] = aprasas
+        if tipas == "video":
+            laukai["supports_streaming"] = "true"
+        telegram("sendVideo" if tipas == "video" else "sendPhoto", laukai, {tipas: (vardas, baitai)})
+    else:
+        media, priedai = [], {}
+        for i, (baitai, vardas, tipas) in enumerate(failai):
+            item = {"type": tipas, "media": f"attach://f{i}"}
+            if i == 0 and aprasas:
+                item["caption"] = aprasas
+            if tipas == "video":
+                item["supports_streaming"] = True
+            media.append(item)
+            priedai[f"f{i}"] = (vardas, baitai)
+        telegram("sendMediaGroup",
+                 {"chat_id": CHANNEL, "media": json.dumps(media, ensure_ascii=False)}, priedai)
+
+    if tekstas and not aprasas:  # per ilgas tekstas – siunčiamas atskira žinute
         telegram("sendMessage", {"chat_id": CHANNEL, "text": tekstas})
 
+
+# ---------- pagrindinė dalis ----------
 
 def main() -> int:
     if not DRY_RUN and (not TOKEN or not CHANNEL):
@@ -129,14 +247,16 @@ def main() -> int:
             print(f"Praleista (per senas): {kada:%Y-%m-%d %H:%M}")
             continue
         pradzia = e.get("tekstas", "")[:50].replace("\n", " ")
+        n = len(nuorodos(e.get("nuotrauka", "")))
+        priedas = f" [+{n} failai]" if n else ""
         if DRY_RUN:
-            print(f"[BANDYMAS] Būtų paskelbta {kada:%Y-%m-%d %H:%M}: {pradzia}…")
+            print(f"[BANDYMAS] Būtų paskelbta {kada:%Y-%m-%d %H:%M}{priedas}: {pradzia}…")
             continue
         try:
             paskelbti(e)
             with open(STATE_FILE, "a") as f:
                 f.write(iid + "\n")
-            print(f"Paskelbta {kada:%Y-%m-%d %H:%M}: {pradzia}…")
+            print(f"Paskelbta {kada:%Y-%m-%d %H:%M}{priedas}: {pradzia}…")
         except Exception as ex:
             klaidos += 1
             print(f"Nepavyko ({kada:%Y-%m-%d %H:%M}): {ex}")
