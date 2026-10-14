@@ -292,7 +292,7 @@ AUTO_VELAVIMAS = timedelta(hours=int(os.environ.get("AUTO_VELAVIMAS_VAL", "3")))
 VIDEO_TIKIMYBE = 0.4          # kaip dažnai rinktis vaizdo įrašą, kai yra ir nuotraukų
 ALBUMAS_NUO, ALBUMAS_IKI = 2, 5
 DIENOS = {"pr": 0, "an": 1, "tr": 2, "kt": 3, "pn": 4, "št": 5, "st": 5, "sk": 6}
-VISI = {"visi", "visos", "bet kuri", "bet koks"}
+VISI = {"visi", "visos", "bet kuri", "bet koks", "mix"}
 
 
 def laikas_is_teksto(t: str) -> tuple[int, int] | None:
@@ -415,33 +415,66 @@ def auto_skelbti(now: datetime, busena: list[str]) -> int:
                                          naudota, 1, rnd)[0]
 
             # failai iš tos pačios kategorijos aplanko
-            be_failu = False
+            # Iš kurių kategorijų imami failai:
+            #  „MIX“ / „Visi“ – iš visų; „A + B“ – iš kelių nurodytų; kitaip – iš vienos.
             if kr in VISI:
-                saltiniai = [s for sar in aplanku_map.values() for s in sar]
+                grupes = list(aplanku_map)
+            elif "+" in kr:
+                grupes = [kat_raktas(d) for d in kr.split("+")]
+                truksta = [g for g in grupes if g not in aplanku_map]
+                if truksta:
+                    raise RuntimeError(f"lape „aplankai“ nėra kategorijos „{truksta[0]}“")
             elif kr in aplanku_map:
-                saltiniai = aplanku_map[kr]
+                grupes = [kr]
             else:  # kategorija be aplanko (pvz. DUK, Gyvos) – skelbiamas tik tekstas
-                saltiniai, be_failu = [], True
-            failai = []
-            for s in saltiniai:
-                if s not in failu_talpykla:
-                    failu_talpykla[s] = [] if DRY_RUN and not GOOGLE_API_KEY else drive_aplanko_failai(s)
-                failai += failu_talpykla[s]
-            nuotr = [f for f in failai if f["tipas"] == "photo"]
-            video = [f for f in failai if f["tipas"] == "video"]
+                grupes = []
+            be_failu = not grupes
+
+            def grupes_failai(g):
+                out = []
+                for s in aplanku_map[g]:
+                    if s not in failu_talpykla:
+                        failu_talpykla[s] = [] if DRY_RUN and not GOOGLE_API_KEY else drive_aplanko_failai(s)
+                    out += failu_talpykla[s]
+                return out
 
             fr = lambda f: "f:" + f["id"]
-            if video and (len(nuotr) < 2 or rnd.random() < VIDEO_TIKIMYBE):
-                pasirinkta = maziausiai_naudoti(video, fr, naudota, 1, rnd)
-            elif len(nuotr) >= 2:
-                k = rnd.randint(ALBUMAS_NUO, min(ALBUMAS_IKI, len(nuotr)))
-                pasirinkta = maziausiai_naudoti(nuotr, fr, naudota, k, rnd)
-            elif nuotr:
-                pasirinkta = nuotr
+            gf = {g: grupes_failai(g) for g in grupes}
+            nuotr_gr = {g: [f for f in v if f["tipas"] == "photo"] for g, v in gf.items()}
+            nuotr_gr = {g: v for g, v in nuotr_gr.items() if v}
+            video = [f for v in gf.values() for f in v if f["tipas"] == "video"]
+            nuotr_kiek = sum(len(v) for v in nuotr_gr.values())
+
+            maisyti = len(nuotr_gr) > 1  # MIX ar „A + B“ – visada nuotraukų rinkinys
+            if video and not maisyti and (nuotr_kiek < 2 or rnd.random() < VIDEO_TIKIMYBE):
+                # vaizdo įrašas – iš atsitiktinės grupės, kad visos pasirodytų
+                vg = [g for g in gf if any(f["tipas"] == "video" for f in gf[g])]
+                g = rnd.choice(vg)
+                pasirinkta = maziausiai_naudoti([f for f in gf[g] if f["tipas"] == "video"], fr, naudota, 1, rnd)
+            elif nuotr_kiek >= 2:
+                k = rnd.randint(ALBUMAS_NUO, min(ALBUMAS_IKI, nuotr_kiek))
+                if maisyti:
+                    k = max(k, min(len(nuotr_gr), ALBUMAS_IKI), 4)
+                    k = min(k, nuotr_kiek)
+                    # po lygiai iš kiekvienos kategorijos (pakaitomis)
+                    eiles = {g: maziausiai_naudoti(v, fr, naudota, len(v), rnd) for g, v in nuotr_gr.items()}
+                    tvarka = list(eiles)
+                    rnd.shuffle(tvarka)
+                    pasirinkta, i = [], 0
+                    while len(pasirinkta) < k and any(eiles.values()):
+                        g = tvarka[i % len(tvarka)]
+                        if eiles[g]:
+                            pasirinkta.append(eiles[g].pop(0))
+                        i += 1
+                else:
+                    v = next(iter(nuotr_gr.values()))
+                    pasirinkta = maziausiai_naudoti(v, fr, naudota, k, rnd)
+            elif nuotr_kiek == 1:
+                pasirinkta = next(iter(nuotr_gr.values()))
             else:
                 pasirinkta = []
                 if not DRY_RUN and not be_failu:
-                    raise RuntimeError(f"kategorijos „{kat}“ aplanke nėra nuotraukų ar vaizdo įrašų")
+                    raise RuntimeError(f"kategorijos „{kat}“ aplankuose nėra nuotraukų ar vaizdo įrašų")
 
             aprasymas = (f"{len(pasirinkta)} nuotr." if pasirinkta and pasirinkta[0]["tipas"] == "photo"
                          else "vaizdo įrašas" if pasirinkta else "tik tekstas")
