@@ -9,3 +9,10 @@ auto:2026-10-13 20:00 gyvos
 t:dd598fb80b5a
 auto:2026-10-14 12:30 duk
 t:dbe1d3fb54c2
+auto:2026-10-14 15:00 moteriški
+t:d6fdbb127238
+f:18R33rRJm6aPFgmNHwLNIjLUkuLeVdsUW
+f:1O8oYBZ2aASeoLBEli1Ca5Q0kTqo8W9kz
+f:1-tStOIQeSoEO59pAzOUkbhD2MNJQaDVM
+f:11eQR-8WwsIjIRjHBFAs-eBT2sG-Y0kcm
+f:11Dhw0eksq88I4qOkhkTOhHq0SqSVtjMg
