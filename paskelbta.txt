@@ -22,3 +22,7 @@ f:1MG3wNgN4sfHD8SNcper6iaN1NdgPi-nx
 auto:2026-10-15 10:00 moteriški
 t:a652e5715d3c
 f:1wWP33TW9iVk-xjpgK2n4o3QczbyQhYob
+auto:2026-10-15 15:00 premium
+t:22b20caf2f2b
+f:1Fe7B2hR_SjgUhp67ZwTsYelwL9WUXeup
+f:1-5MckYacvah7GwhbQC1FOGxrwEMLcEY_
