@@ -28,3 +28,9 @@ f:1Fe7B2hR_SjgUhp67ZwTsYelwL9WUXeup
 f:1-5MckYacvah7GwhbQC1FOGxrwEMLcEY_
 auto:2026-10-15 20:00 duk
 t:e313657b939f
+auto:2026-10-16 10:00 moteriški + rankinės ir avalynė
+t:76b636f55be7
+f:1g5ZOalNSO36c8S2Q9SDu94AyDM5tzA8A
+f:14VGL3_pAcOlPJBjuYclm-XDEACa4f0xb
+f:13SASE-c1OITPX8aZtR9l-8wZKhwOmaPR
+f:1OXK71xnUlYlfLsvqqV2DOjNpZIW3D5DR
