@@ -123,3 +123,8 @@ f:1Lb56IQimjepMEcCqVBJzDKhUzK-2xcXd
 auto:2026-10-22 10:00 moteriški
 t:5b0ce1425e43
 f:1Mr8UH3v8V1JRV8eS9zHoX51DvnPPyYG1
+auto:2026-10-22 15:00 premium
+t:f5b25f200d4a
+f:1_ZkDGNS8fyac4eCkFSvC-xNnlyxMIYXw
+f:1TDuvIwg5D5pMJdlUWPivlI0x77lKuk2T
+f:1Ezlp7fqRh4lu-UfI6C5XTRBKVA1B2apF
