@@ -130,3 +130,9 @@ f:1TDuvIwg5D5pMJdlUWPivlI0x77lKuk2T
 f:1Ezlp7fqRh4lu-UfI6C5XTRBKVA1B2apF
 auto:2026-10-22 20:00 duk
 t:acc9e1475203
+auto:2026-10-23 10:00 moteriški + rankinės ir avalynė
+t:74030b724023
+f:1z7WKY1kts_WCXXHon_mIUTlAaqSjAEW5
+f:1wzm3LMrLfH5VidCdbHPM1dp7-i589_ng
+f:1cdLqZqoymf8aJUVdOkyU8kWwL9__BUJw
+f:1XZGqF-TxTBTZjSIb6w32rc837HiJdTPd
