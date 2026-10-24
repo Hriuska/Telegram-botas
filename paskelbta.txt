@@ -156,3 +156,7 @@ f:1CPvLhl6jDl9EDG2G9V81HusXM2TqeBQp
 auto:2026-10-24 15:00 moteriški
 t:fc8a6f5e8e06
 f:1PuKLDU-_q2LXj_7xx3UVs0A7HJK5Dh97
+auto:2026-10-24 20:00 premium
+t:58c2e9960b08
+f:1A1gG9q9HkyTPGVte5yKS71Dl_tilcMrl
+f:1_5aXaOja30ojfP33LRgnNqwqbRt7e28N
