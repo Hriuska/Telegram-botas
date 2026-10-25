@@ -160,3 +160,6 @@ auto:2026-10-24 20:00 premium
 t:58c2e9960b08
 f:1A1gG9q9HkyTPGVte5yKS71Dl_tilcMrl
 f:1_5aXaOja30ojfP33LRgnNqwqbRt7e28N
+auto:2026-10-25 10:00 vyriški
+t:82e8a78f65c6
+f:1xOttK9K9zhEiStA2_JoqnteTdsF4eQ-L
