@@ -180,3 +180,9 @@ auto:2026-10-26 15:00 vyriški
 t:3adff03346da
 f:1av2hUAr_tRNV8sHamljhQi6KBqmtezxc
 f:1fbWum_D853dQVISCcGd1Ro7Q4Pojbdj9
+auto:2026-10-26 20:00 mix
+t:a694d6776b80
+f:1q_L0s__AdPrazaHCN4bmpfieZ1Vdw2OS
+f:1l96hg7Co6dZetyZSMNIYvW_0ZaWZYLUe
+f:1SVSjX6ZIQxznPQcBlhdK_2WXPrX7vfOX
+f:1hIkYXFDQfxd6UUgLBRoWqBBzUeMXoiTa
