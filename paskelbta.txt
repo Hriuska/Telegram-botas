@@ -189,3 +189,10 @@ f:1hIkYXFDQfxd6UUgLBRoWqBBzUeMXoiTa
 auto:2026-10-27 10:00 premium
 t:5ce6e9a2d06f
 f:135OJ3o8YZK8hQ5ei4J8_sOc-JzlAgrHy
+auto:2026-10-27 15:00 moteriški + rankinės ir avalynė
+t:f0bc2b91fd93
+f:1ZY93Uz5_tiHBnhWNuIfMRWvaOB10stT6
+f:1BJMDuGtaQBJRQHAIKsCOgc9FMXFmPWE8
+f:1fF7qHQRZPoVhSOlvoQ-opvANkqpDBkJN
+f:1_gilnOzsGCKOIYN7oRVwXneeuTfReet-
+f:1F3yukJKHojbHLXYFQmKG5cP0Mc7rgN4P
