@@ -208,3 +208,7 @@ auto:2026-10-28 15:00 moteriški
 t:554ddb25df33
 f:15ABdKZKl9Uios84w1lvzd2dPyTBRMmRu
 f:1QlzTgvwDSN-xDJ3OdQnorlBW08CtqDiG
+auto:2026-10-28 20:00 vyriški
+t:be1596f6f78a
+f:1FOpY8hwBbyNcZgmHQJBOd9MK0dhixDHF
+f:1TaGq9T3Kp1L8tCnRbAI7bSW19yYD0qhT
