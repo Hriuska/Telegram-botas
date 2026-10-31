@@ -250,3 +250,10 @@ f:1U1E8h_hmcW6Xv3vbviLUt67I57WkulW7
 auto:2026-10-31 15:00 moteriški
 t:6a67d1640fc5
 f:1Qt_vo_NHSdAkSDoxuEzVRu8e8r0h8jHG
+auto:2026-10-31 20:00 premium
+t:6885a6417f23
+f:1xnMglzk4Z5a8pEOalnnVeH6hWBVlJxBi
+f:147Gfq3vPH1BbnRf-WOICdRlhAmORRxxS
+f:1kz4NyLKiuKBhTcED1EGpaadmM2v-TK0Q
+f:1IP1MH_Q6COWNgaBgou6DuupgDtXsQKtq
+f:1MR9mCzRKXiIukXaF1JkwyIxSNg0Zqxn6
