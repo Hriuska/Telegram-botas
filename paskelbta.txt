@@ -272,3 +272,9 @@ f:1KMPsGWIJVA3L2ofUw48IlOasQ_GWJlhP
 auto:2026-11-02 10:00 moteriški
 t:b79a8719f803
 f:14C0jBN9PX7rbbhIkc9zIlAE66Eo_KPuQ
+auto:2026-11-02 15:00 vyriški
+t:91f0acd9582a
+f:1w4JAdfSEtdnQ01hmMpP2AdLn36UkWjKm
+f:10a65Sj97ocBhb2qNwGgBXFxGRSQWdCyk
+f:1zukgGZMGTCsShFn335EJj94Bhsncjsv3
+f:1PidW6HW-zRb0B_n8okSK9zYE2uuUzZVa
