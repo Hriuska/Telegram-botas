@@ -320,3 +320,7 @@ f:17VUnPqI4vZ71oE-fy50cIytHuojcibh-
 auto:2026-11-05 10:00 moteriški
 t:d6fdbb127238
 f:1N82UL1ss9j3CBr5jFKOOXhr9PBHDPWlx
+auto:2026-11-05 15:00 premium
+t:36883f296afd
+f:1orIHIOBlFPpq7BCshdLrcSB_xAYEnkDF
+f:1t8B-yEq7zppwa7rz76T9PkasNoSt5SMg
