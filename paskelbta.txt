@@ -340,3 +340,10 @@ f:1ZBXZ77bMXHVdk1aljrbo3Ap_Ac5DB-NJ
 auto:2026-11-06 20:00 moteriški
 t:1092cc070f57
 f:1s146KLelV_B7AYy0Ao2lNbuSgDG_oJyG
+auto:2026-11-07 10:00 mix
+t:177c3c20a38e
+f:1BRXwmP3SA17Ad7BrhV4oewTJSzncx5vv
+f:1aKCps0aKhPYoPQHdYrXCIOuAmVgxt8im
+f:1-AlOpgjT6mv5rt1_CvbKRlVJSp9uhUsX
+f:1ZY93Uz5_tiHBnhWNuIfMRWvaOB10stT6
+f:1MjyME0bASsoJk10o8dqq5AG5lxDi5Bs_
