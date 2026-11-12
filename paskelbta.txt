@@ -421,3 +421,6 @@ f:1TLrtv0W7H1MfsdGQcngi9b4yqeIpNt9J
 auto:2026-11-12 10:00 moteriški
 t:6634d3b06859
 f:1oUNr2gKbDbKl7lS45lKRQnv17NFYAlND
+auto:2026-11-12 15:00 premium
+t:5ce6e9a2d06f
+f:1PCoZfVftBe-VVcUrnhNIGovd-cok6Cr8
