@@ -426,3 +426,10 @@ t:5ce6e9a2d06f
 f:1PCoZfVftBe-VVcUrnhNIGovd-cok6Cr8
 auto:2026-11-12 20:00 duk
 t:d40cc5cc6f1d
+auto:2026-11-13 10:00 moteriški + rankinės ir avalynė
+t:74030b724023
+f:1qPD-wBX0et0I4DU6pnupWA1uynMNtBVK
+f:11tfusBkTxwDpEuvdJ5gwwlivj21LCjRb
+f:1Hqg-T7NMqU3KHbmi2TVztT5qj0m8XR6E
+f:1804lxRAUGGSeCP3uxi_o2RSunTZ4U2Id
+f:1vBwyFeR0WVIi0SDZkVZwOXkpYSkoMQ3S
