@@ -491,3 +491,8 @@ f:10-Zl8FZLVs2rM3THLWAOBZ_W-sTG83eM
 auto:2026-11-21 15:00 moteriški
 t:caa0bcdc0d4c
 f:1o9msy5lCY69JzhSRCmpA9yWuUu8Xse5b
+auto:2026-11-22 10:00 vyriški
+t:d485b4748d60
+f:1OZ0RbP5gcDKjViwDjDa5uYOXKnBCqoS5
+f:13XvjbsXUI9MYas24VxDH74UCZRLg1Uwd
+f:1pq_gCds9w8Vn09znb_pUbY4KgkDL1r6F
