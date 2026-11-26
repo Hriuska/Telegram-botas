@@ -504,3 +504,8 @@ t:a748bcbad290
 f:1m4onyH_d3MCbdewB7ETaG5FrBCJGtC1C
 f:1ZfVMa0AWzoe8uOwn-Gbx2agimoGMs-5m
 f:1hrelj5SVLnjTb7z4B2l_caH8xLRQ1e0C
+auto:2026-11-26 10:00 moteriški
+t:6a67d1640fc5
+f:18P0UBCd28uaOD9Fgi59aRVDEpBBP56U1
+f:1-sd5wnNE45llglR1vjsoRgIlNezAypRy
+f:1cMYL7oXPD24zXULRqKdNlZ8RxWE7TL2z
